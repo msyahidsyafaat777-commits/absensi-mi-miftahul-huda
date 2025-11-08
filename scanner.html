@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Scanner Absensi - MI Miftahul Huda</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body{font-family:Arial, sans-serif; padding:12px; max-width:600px; margin:auto;}
+    #reader { width:100%; }
+    .log { margin-top:12px; }
+    .last { padding:8px; border:1px solid #ddd; background:#f9f9f9; }
+    button { margin-top:8px; }
+  </style>
+</head>
+<body>
+  <h2>Scanner Absensi</h2>
+  <p>MI Miftahul Huda — Guru buka halaman ini, lalu scan QR siswa dengan kamera.</p>
+
+  <div id="reader"></div>
+
+  <div class="log">
+    <div><strong>Hasil scan terakhir:</strong></div>
+    <div id="last" class="last">Belum ada.</div>
+  </div>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+  <script>
+    // ==== PENTING: ganti ini dengan Web App URL dari Apps Script yang kamu deploy ====
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz-MIgahG9IEJ3f9SXd_qM81t-mrgDXf92cou-WNsX2JosoKsmi4nxbo6fjwkdssxApKg/exec"; // contoh: https://script.google.com/macros/s/AKfy.../exec
+
+    if (WEB_APP_URL === "https://script.google.com/macros/s/AKfycbz-MIgahG9IEJ3f9SXd_qM81t-mrgDXf92cou-WNsX2JosoKsmi4nxbo6fjwkdssxApKg/exec") {
+      document.getElementById('last').innerText = 'ERROR: Masukkan WEB_APP_URL di file scanner.html';
+    }
+
+    function postToSheet(data) {
+      return fetch(WEB_APP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }).then(res => res.json());
+    }
+
+    function handleScannedText(text) {
+      // format kita: ID|Name
+      var parts = text.split('|');
+      var id = parts[0] ? parts[0].trim() : '';
+      var name = parts[1] ? parts[1].trim() : '';
+      if (!id || !name) {
+        // kalau QR berbeda format, tampilkan saja
+        document.getElementById('last').innerText = 'Format QR tidak sesuai: ' + text;
+        return;
+      }
+      var payload = { id: id, name: name, status: 'Hadir' };
+      document.getElementById('last').innerText = 'Mengirim: ' + name + ' ('+id+')...';
+      postToSheet(payload)
+        .then(function(resp){
+          if (resp && resp.status === 'ok') {
+            document.getElementById('last').innerText = 'Tercatat: ' + name + ' ('+id+') pada ' + resp.tanggal + ' ' + resp.jam;
+          } else {
+            document.getElementById('last').innerText = 'Gagal: ' + JSON.stringify(resp);
+          }
+        })
+        .catch(function(err){
+          document.getElementById('last').innerText = 'Error jaringan: ' + err;
+        });
+    }
+
+    // Inisialisasi HTML5 QR Code scanner
+    const html5QrCode = new Html5Qrcode("reader");
+    const config = { fps: 10, qrbox: 250 };
+
+    function startCamera() {
+      Html5Qrcode.getCameras().then(cameras => {
+        if (cameras && cameras.length) {
+          // pilih camera belakang bila ada
+          var cameraId = cameras[0].id;
+          for (let cam of cameras) {
+            if (cam.label && /back|rear|belakang/i.test(cam.label)) { cameraId = cam.id; break; }
+          }
+          html5QrCode.start(
+            cameraId,
+            config,
+            qrCodeMessage => {
+              // callback saat berhasil scan
+              handleScannedText(qrCodeMessage);
+            },
+            errorMessage => {
+              // tiap frame error (bukan error fatal)
+              // console.log('scan error', errorMessage);
+            })
+          .catch(err => { document.getElementById('last').innerText = 'Tidak bisa mulai kamera: '+err; });
+        } else {
+          document.getElementById('last').innerText = 'Tidak menemukan kamera';
+        }
+      }).catch(err => { document.getElementById('last').innerText = 'Gagal akses kamera: '+err; });
+    }
+
+    // Mulai otomatis
+    startCamera();
+
+    // Jika mau stop/start manual (opsional)
+    // html5QrCode.stop();
+  </script>
+</body>
+</html>
